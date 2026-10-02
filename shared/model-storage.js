@@ -110,6 +110,37 @@
     }
   }
 
+  // Optional private setup file; imported once into extension-local storage.
+  async function importLocalModelConfig(storage) {
+    if (!root?.chrome?.runtime?.getURL || typeof root.fetch !== "function") return null;
+    const marker = "localModelConfigImported";
+    const saved = await storage.local.get([marker]);
+    if (saved[marker]) return null;
+    let response;
+    try {
+      response = await root.fetch(root.chrome.runtime.getURL("local-model-config.json"));
+    } catch (_) {
+      return null; // Normal for installations without a private setup file.
+    }
+    if (!response.ok) return null;
+    const config = await response.json();
+    const builtinOverride = {
+      name: text(config.name) || "DeepSeek Flash",
+      baseUrl: text(config.baseUrl),
+      apiKey: text(config.apiKey),
+      model: text(config.model),
+    };
+    validateBaseUrl(builtinOverride.baseUrl);
+    if (!builtinOverride.apiKey || !builtinOverride.model) {
+      throw new Error("本地模型配置不完整");
+    }
+    await storage.local.set({
+      [keys.builtinOverride]: builtinOverride,
+      [keys.activeModelId]: DEFAULT_MODEL.id,
+      [marker]: true,
+    });
+    return builtinOverride;
+  }
   async function loadModelState(storageOverride) {
     const storage = getStorage(storageOverride);
     const localData = await storage.local.get([
@@ -163,6 +194,12 @@
     } else if (!activeModelId) {
       activeModelId = DEFAULT_MODEL.id;
       await storage.local.set({ [keys.activeModelId]: activeModelId });
+    }
+
+    const localSetup = await importLocalModelConfig(storage);
+    if (localSetup) {
+      builtinOverride = localSetup;
+      activeModelId = DEFAULT_MODEL.id;
     }
 
     return {

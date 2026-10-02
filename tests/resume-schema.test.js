@@ -125,3 +125,28 @@ test("resume schema preserves flexible date precision and legacy aliases", () =>
   assert.equal(normalized.educations[0].startDate, "2021-09");
   assert.equal(normalized.educations[0].endDate, "2025-06");
 });
+
+
+test("recruiting details survive normalization and remain individually mappable", () => {
+  const schema = loadResumeSchema();
+  const source = {
+    personal: { ethnicity: "汉族", healthStatus: "健康" },
+    contactAndLocation: { emergencyContactRelationship: "", studentSource: "某省某市" },
+    jobPreferences: { recruitmentType: "校园招聘", graduationYear: "2027", availableDate: "" },
+    educations: [{ degreeName: "硕士", degreeType: "专业学位", verificationCode: "test-code", ranking: "28/182" }],
+    awards: Array.from({ length: 6 }, (_, i) => ({ name: `Award ${i}`, awardDate: "2024-12" })),
+    publications: [{ title: "Accepted paper", status: "已录用", authorOrder: "第一作者" }, { title: "Submitted paper", status: "在投" }],
+    familyMembers: [{ relationship: "父亲", name: "Test" }],
+  };
+  const profile = schema.normalizeResumeProfile(source);
+  assert.equal(profile.awards.length, 6);
+  assert.equal(profile.awards[0].awardDate, "2024-12");
+  assert.equal(profile.publications[1].status, "在投");
+  assert.equal(profile.educations[0].verificationCode, "test-code");
+  assert.equal(profile.jobPreferences.availableDate, "");
+  assert.equal(profile.contactAndLocation.emergencyContactRelationship, "");
+  const catalog = schema.getCatalogWithValues(profile);
+  for (const path of ["awards.5.name", "publications.1.status", "familyMembers.0.name", "personal.ethnicity", "educations.0.degreeType"]) {
+    assert.ok(catalog.some(field => field.path === path && field.hasValue), path);
+  }
+});

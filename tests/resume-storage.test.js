@@ -4,12 +4,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-function loadResumeStorage() {
+function loadResumeStorage(windowGlobals = {}) {
   const source = fs.readFileSync(
     path.join(__dirname, "../shared/resume-storage.js"),
     "utf8"
   );
-  const context = { window: {}, console };
+  const context = { window: { ...windowGlobals }, console };
   vm.createContext(context);
   vm.runInContext(source, context);
   return context.window.ResumeStorage;
@@ -298,4 +298,59 @@ test("both resume entry points use the shared local storage helper", () => {
       /chrome\.storage\.sync\.set\(\s*\{\s*\[RESUME_(?:PROFILE|IMPORT_RAW_TEXT)_KEY\]/
     );
   }
+});
+
+
+test("private resume imports once, preserves templates and subsequent edits", async () => {
+  const fake = createStorage({ local: {
+    resumeTemplates: { existing: { id: "existing", name: "Existing", profile: { personal: { fullName: "Existing user" } } } },
+    activeResumeTemplateId: "existing",
+  } });
+  let fetches = 0;
+  const storage = loadResumeStorage({
+    chrome: { runtime: { getURL: (file) => `chrome-extension://test/${file}` } },
+    fetch: async () => {
+      fetches++;
+      return { ok: true, json: async () => ({ name: "Imported", schemaVersion: 5,
+        profile: { personal: { fullName: "Imported user" } },
+      }) };
+    },
+  });
+  const initial = await storage.loadTemplateState(fake.storage);
+  assert.equal(initial.templates.length, 2);
+  assert.equal(initial.templates.find(t => t.id === "existing").profile.personal.fullName, "Existing user");
+  const importedId = initial.activeTemplateId;
+  assert.notEqual(importedId, "existing");
+  await storage.saveTemplateContent(importedId, { profile: { personal: { fullName: "Edited user" } } }, fake.storage);
+  const next = await storage.loadTemplateState(fake.storage);
+  assert.equal(next.templates.length, 2);
+  assert.equal(next.templates.find(t => t.id === importedId).profile.personal.fullName, "Edited user");
+  assert.equal(fetches, 1);
+  assert.equal(fake.calls.syncSet.length, 0);
+  await storage.deleteTemplate(importedId, fake.storage);
+  const afterDelete = await storage.loadTemplateState(fake.storage);
+  assert.equal(afterDelete.templates.length, 1);
+  assert.equal(fetches, 1);
+});
+
+test("missing private resume keeps the normal template flow", async () => {
+  const fake = createStorage();
+  const storage = loadResumeStorage({
+    chrome: { runtime: { getURL: file => file } },
+    fetch: async () => { throw new Error("not found"); },
+  });
+  const state = await storage.loadTemplateState(fake.storage);
+  assert.equal(state.templates.length, 1);
+  assert.equal(fake.state.local.localResumeConfigImported, undefined);
+});
+
+test("invalid private resume is not marked imported or used to replace templates", async () => {
+  const fake = createStorage();
+  const storage = loadResumeStorage({
+    chrome: { runtime: { getURL: file => file } },
+    fetch: async () => ({ ok: true, json: async () => ({ profile: {} }) }),
+  });
+  await assert.rejects(storage.loadTemplateState(fake.storage), /有效个人资料/);
+  assert.equal(fake.state.local.localResumeConfigImported, undefined);
+  assert.equal(Object.keys(fake.state.local.resumeTemplates).length, 1);
 });

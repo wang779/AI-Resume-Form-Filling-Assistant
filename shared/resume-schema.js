@@ -93,6 +93,9 @@
         { key: "currentDistrict", label: "现居区县", input: "text", placeholder: "浦东新区" },
         { key: "nationality", label: "民族/国籍", input: "text", placeholder: "中国" },
         { key: "citizenship", label: "公民身份", input: "text", placeholder: "中国" },
+        {"key": "ethnicity", "label": "民族", "input": "text"},
+        {"key": "healthStatus", "label": "健康状况", "input": "text"},
+        {"key": "veteranStatus", "label": "是否退役军人", "input": "text"},
         { key: "maritalStatus", label: "婚姻状况", input: "select", options: ["", "未婚", "已婚", "不方便透露"] },
         { key: "currentCompany", label: "当前公司", input: "text", placeholder: "某科技公司" },
         { key: "currentTitle", label: "当前职位", input: "text", placeholder: "软件工程师" },
@@ -125,6 +128,9 @@
         { key: "hukouLocation", label: "户口所在地", input: "text", placeholder: "江苏南京" },
         { key: "emergencyContactName", label: "紧急联系人姓名", input: "text", placeholder: "李四" },
         { key: "emergencyContactPhone", label: "紧急联系人电话", input: "tel", placeholder: "13700137000" },
+        {"key": "emergencyContactRelationship", "label": "紧急联系人关系", "input": "text"},
+        {"key": "hometownDistrict", "label": "籍贯区县", "input": "text"},
+        {"key": "studentSource", "label": "生源地（高考所在地）", "input": "text"},
         { key: "timezone", label: "当前时区", input: "text", placeholder: "Asia/Shanghai" },
       ],
     },
@@ -165,6 +171,8 @@
       label: "求职偏好",
       type: "group",
       fields: [
+        {"key": "recruitmentType", "label": "招聘类型", "input": "text"},
+        {"key": "graduationYear", "label": "毕业届别", "input": "text"},
         { key: "targetRole", label: "目标岗位", input: "text", placeholder: "高级后端工程师" },
         { key: "targetLevel", label: "目标职级", input: "text", placeholder: "高级 / 专家 / Leader" },
         { key: "targetDepartment", label: "目标部门", input: "text", placeholder: "技术 / 产品 / AI" },
@@ -266,6 +274,13 @@
         { key: "faculty", label: "院系", input: "text", placeholder: "计算机学院" },
         { key: "className", label: "班级", input: "text", placeholder: "计算机 2101 班" },
         { key: "studentId", label: "学号", input: "text", placeholder: "20231234" },
+        {"key": "degreeName", "label": "学位名称", "input": "text"},
+        {"key": "degreeType", "label": "学位类型", "input": "text"},
+        {"key": "campus", "label": "校区", "input": "text"},
+        {"key": "majorCategory", "label": "专业类别", "input": "text"},
+        {"key": "verificationCode", "label": "学信网验证码", "input": "text"},
+        {"key": "verificationType", "label": "学信网验证类型", "input": "text"},
+        {"key": "isTopUpDegree", "label": "是否专升本", "input": "text"},
         { key: "academicSystem", label: "学制", input: "text", placeholder: "4" },
         { key: "city", label: "所在城市", input: "text", placeholder: "北京" },
         { key: "country", label: "所在国家", input: "text", placeholder: "中国" },
@@ -293,6 +308,9 @@
       fields: [
         { key: "company", label: "公司名称", input: "text", placeholder: "字节跳动" },
         { key: "title", label: "职位名称", input: "text", placeholder: "后端开发实习生" },
+        {"key": "referenceName", "label": "证明人姓名", "input": "text"},
+        {"key": "referenceTitle", "label": "证明人职务", "input": "text"},
+        {"key": "referenceCompany", "label": "证明人单位", "input": "text"},
         { key: "department", label: "所属部门", input: "text", placeholder: "推荐架构部" },
         { key: "city", label: "实习城市", input: "text", placeholder: "北京" },
         { key: "country", label: "实习国家", input: "text", placeholder: "中国" },
@@ -431,6 +449,42 @@
           options: ["", "母语", "流利", "工作熟练", "中等", "基础"],
         },
         { key: "testScore", label: "语言成绩", input: "text", placeholder: "雅思 7.5 / 托福 105 / CET-6" },
+      ],
+    },
+    {
+      key: "awards", label: "奖项明细", type: "list", initialItems: 1, slots: 10, itemLabel: "奖项",
+      note: "仅填写已有资料；未知项留空。",
+      fields: [
+        {"key": "name", "label": "奖项名称", "input": "text"},
+        {"key": "level", "label": "奖项级别", "input": "text"},
+        {"key": "category", "label": "奖项类型", "input": "text"},
+        {"key": "awardDate", "label": "获奖日期", "input": "date"},
+        {"key": "issuer", "label": "颁发单位", "input": "text"},
+        {"key": "credentialId", "label": "证书编号", "input": "text"},
+        {"key": "description", "label": "补充说明", "input": "textarea"},
+      ],
+    },
+    {
+      key: "publications", label: "论文与科研成果", type: "list", initialItems: 1, slots: 8, itemLabel: "论文",
+      note: "仅填写已有资料；未知项留空。",
+      fields: [
+        {"key": "title", "label": "论文标题", "input": "text"},
+        {"key": "venue", "label": "会议或期刊", "input": "text"},
+        {"key": "year", "label": "年份", "input": "text"},
+        {"key": "status", "label": "状态（已发表/已录用/在投）", "input": "text"},
+        {"key": "authorOrder", "label": "本人作者排序", "input": "text"},
+        {"key": "doi", "label": "DOI", "input": "text"},
+        {"key": "description", "label": "论文内容与补充说明", "input": "textarea"},
+      ],
+    },
+    {
+      key: "familyMembers", label: "家庭成员", type: "list", initialItems: 1, slots: 5, itemLabel: "家庭成员",
+      note: "仅填写已有资料；未知项留空。",
+      fields: [
+        {"key": "relationship", "label": "关系", "input": "text"},
+        {"key": "name", "label": "姓名", "input": "text"},
+        {"key": "organization", "label": "工作单位", "input": "text"},
+        {"key": "occupation", "label": "职务或职业", "input": "text"},
       ],
     },
     {
@@ -941,11 +995,28 @@
     return JSON.stringify(createEmptyResumeProfile({ mode: "max" }), null, 2);
   }
 
+  function getRecordChoices(profile, sectionKey) {
+    const section = getSectionDefinition(sectionKey);
+    if (section?.type !== "list" || !Array.isArray(profile?.[sectionKey])) return [];
+    return profile[sectionKey].map((record, index) => ({ record, index }))
+      .filter(({ record }) => record && section.fields.some(field => String(record[field.key] ?? "").trim()))
+      .map(({ record, index }) => {
+        const keys = sectionKey === "familyMembers" ? ["relationship", "name", "organization"]
+          : sectionKey === "educations" ? ["school", "degree", "major"]
+          : sectionKey === "publications" ? ["title", "venue", "status"]
+          : ["name", "company", "organization", "title", "role", "awardDate", "startDate", "level"];
+        const parts = [...new Set(keys.map(key => String(record[key] || "").trim()).filter(Boolean))];
+        const summary = parts.join(" · ") || section.fields.map(field => String(record[field.key] || "").trim()).find(Boolean);
+        return { index, label: `${index + 1}. ${summary.slice(0, 150)}`, record };
+      });
+  }
+
   window.ResumeSchema = {
-    version: 4,
+    version: 5,
     sections: SECTION_DEFINITIONS,
     clone,
     getSectionDefinition,
+    getRecordChoices,
     createEmptyListItem,
     createEmptyResumeProfile,
     normalizeResumeProfile,

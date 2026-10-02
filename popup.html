@@ -99,6 +99,19 @@
             </button>
             <div class="tip" id="fillTip" hidden></div>
           </div>
+
+          <div class="record-fill-card">
+            <label for="recordSectionSelect">单条记录填入 · 信息类别</label>
+            <select id="recordSectionSelect" class="template-select"></select>
+            <label for="recordSelect">具体记录</label>
+            <select id="recordSelect" class="template-select" aria-describedby="recordFillHelp">
+              <option value="">请选择要填写的记录</option>
+            </select>
+            <p class="tip" id="recordFillHelp">先选择信息类别与具体记录，再在网页新增一条。点击按钮后，只框选新增区域；已有内容会保留。</p>
+            <button class="btn btn-outline btn-lg" id="startRecordFillBtn" disabled>
+              <span id="startRecordFillBtnText">请选择记录</span>
+            </button>
+          </div>
         </section>
 
         <section class="tab-panel" id="tab-resume">

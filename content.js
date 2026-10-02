@@ -148,6 +148,8 @@
     handleStartFill(message.modelId, message.resumeProfile, {
         fillMode: message.fillMode,
         scope: message.scope,
+        awardIndex: message.awardIndex,
+        recordSelection: message.recordSelection,
       })
         .then((result) => sendResponse(result))
         .catch((error) =>
@@ -169,8 +171,17 @@
         throw new Error("标准简历为空：请先在侧边栏填写或导入标准简历");
       }
 
-      const fillMode = request?.fillMode === "incremental" ? "incremental" : "overwrite";
-      const scope = request?.scope === "selection" ? "selection" : "page";
+      // Accept the previous award-only request format as well.
+      const legacyAward = request.awardIndex !== undefined && request.awardIndex !== null;
+      const selection = request.recordSelection ?? (legacyAward ? { section: "awards", index: request.awardIndex } : null);
+      const hasRecordSelection = selection !== null;
+      if (hasRecordSelection && (!Number.isInteger(selection.index) || selection.index < 0 ||
+          !schema.getRecordChoices(resumeProfile, selection.section).some(item => item.index === selection.index))) {
+        throw new Error(legacyAward ? "所选奖项无效，请在侧边栏重新选择" : "所选记录无效，请在侧边栏重新选择");
+      }
+      const recordPrefix = hasRecordSelection ? `${selection.section}.${selection.index}.` : "";
+      const fillMode = hasRecordSelection || request?.fillMode === "incremental" ? "incremental" : "overwrite";
+      const scope = hasRecordSelection || request?.scope === "selection" ? "selection" : "page";
       let selectionRect = null;
 
       if (scope === "selection") {
@@ -232,11 +243,13 @@
       let mappings = null;
       let cacheHit = false;
 
-      const cacheLookup = await loadMappingCacheEntry(cacheKey, {
-        host: location.host,
-        path: location.pathname,
-        signature: cacheSignature,
-      });
+      const cacheLookup = hasRecordSelection
+        ? { entry: null, reason: "单条记录填入独立建立映射" }
+        : await loadMappingCacheEntry(cacheKey, {
+          host: location.host,
+          path: location.pathname,
+          signature: cacheSignature,
+        });
       const cachedEntry = cacheLookup.entry;
       if (cachedEntry?.mappings?.length) {
         mappings = normalizeMappings(cachedEntry.mappings, scan.fields);
@@ -250,6 +263,14 @@
         );
 
         const promptPayload = buildFieldMappingPayload(scan.fields, resumeProfile);
+        if (hasRecordSelection) {
+          promptPayload.resumeFields = promptPayload.resumeFields.filter(field => field.path.startsWith(recordPrefix));
+          promptPayload.mappingScope = {
+            section: selection.section,
+            allowedPathPrefix: recordPrefix,
+            instruction: "用户已明确选择这一条记录。仅映射该记录的字段；其他字段留空，不根据页面序号更换记录。",
+          };
+        }
         const aiText = await aiClient.callAI(
           modelId,
           JSON.stringify(promptPayload),
@@ -258,17 +279,22 @@
         const parsed = parseJsonFromAiText(aiText);
         mappings = normalizeMappings(parsed?.mappings, scan.fields);
 
-        await saveMappingCacheEntry(cacheKey, {
-          updatedAt: Date.now(),
-          mappings,
-          host: location.host,
-          path: location.pathname,
-          signature: cacheSignature,
-        });
+        if (!hasRecordSelection) {
+          await saveMappingCacheEntry(cacheKey, {
+            updatedAt: Date.now(),
+            mappings,
+            host: location.host,
+            path: location.pathname,
+            signature: cacheSignature,
+          });
+        }
 
-        sendLog("success", "字段映射已生成，并已写入本地缓存。");
+        sendLog("success", hasRecordSelection ? "已生成所选记录的专用映射。" : "字段映射已生成，并已写入本地缓存。");
       }
 
+      if (hasRecordSelection) {
+        mappings = mappings.filter(item => String(item.resumePath || "").startsWith(recordPrefix));
+      }
       const mappingById = new Map();
       for (const mapping of mappings || []) {
         if (!mapping?.fieldId) continue;
@@ -336,7 +362,10 @@
           continue;
         }
 
-        const rawValue = schema.getValueByPath(resumeProfile, mapping.resumePath);
+        let rawValue = schema.getValueByPath(resumeProfile, mapping.resumePath);
+        if (runtime?.kind === "custom_select") {
+          rawValue = window.ResumeCustomSelect.resolveValue(runtime, rawValue, resumeProfile, mapping.resumePath);
+        }
         const finalValue = deriveFillValue(rawValue, mapping.transform, runtime);
 
         sendLog(
@@ -932,6 +961,7 @@
     const runtime = [];
 
     let idSeq = 0;
+    const customHosts = new Set();
     const radioGroups = new Map();
     const checkboxGroups = new Map();
 
@@ -954,6 +984,19 @@
         sectionEvidence: semanticMeta.sectionEvidence,
         nearbyLabels: semanticMeta.nearbyLabels,
       };
+
+      const customControl = window.ResumeCustomSelect?.identify(el);
+      if (customControl) {
+        if (customHosts.has(customControl.host)) continue;
+        customHosts.add(customControl.host);
+        if (customControl.host.classList.contains("is-disabled")) continue;
+        const fieldId = `f_${++idSeq}`;
+        fields.push({ fieldId, kind: "select", label: window.ResumeCustomSelect.getLabel(el) || semanticMeta.label,
+          name: el.getAttribute("name") || "", id: el.id || "",
+          placeholder: el.getAttribute("placeholder") || "", options: [], ...commonMeta });
+        runtime.push({ fieldId, kind: "custom_select", controlType: customControl.type, el });
+        continue;
+      }
 
       if (tag === "select") {
         const fieldId = `f_${++idSeq}`;
@@ -1691,6 +1734,10 @@
 
       const ok = await safeCheck(best.el, true);
       return ok ? { filled: true } : { filled: false, message: "点击单选项失败" };
+    }
+
+    if (runtime.kind === "custom_select") {
+      return window.ResumeCustomSelect.fill(runtime.el, value);
     }
 
     if (runtime.kind === "select") {

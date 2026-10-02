@@ -64,6 +64,7 @@ async function callAI(modelId, prompt, mode) {
 - fields：当前页面识别到的表单字段
 - fields 中的单个 field 可能额外带有 sectionKey、sectionLabel、sectionEvidence、nearbyLabels，用于表示扫描阶段推断出的区块和邻近标签
 - resumeFields：预先定义好的标准简历字段目录（含 path、label、sectionLabel、itemLabel、hasValue、valuePreview 等）
+- mappingScope（可选）：用户明确选择的记录范围。存在时，只能使用 resumeFields 中该范围的路径；页面上的条目序号不代表简历条目序号。
 
 你的任务：
 1) 为每个页面 field 选择最合适的 resumePath

@@ -1201,3 +1201,16 @@ body {
   font-size: 12px;
   white-space: nowrap;
 }
+
+
+.record-fill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+.record-fill-card > label { font-size: 13px; font-weight: 600; }
+.record-fill-card .tip { margin: 0; }

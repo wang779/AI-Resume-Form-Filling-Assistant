@@ -41,3 +41,10 @@ debug-logs/
 
 # Local snapshots / external test packages
 external-test-package-*/
+
+# Private extension setup
+local-model-config.json
+
+# Private resume and backups
+local-resume-config.json
+private-resume/

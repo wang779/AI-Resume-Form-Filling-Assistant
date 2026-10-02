@@ -4,12 +4,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-function loadModelStorage() {
+function loadModelStorage(extraGlobals = {}) {
   const source = fs.readFileSync(
     path.join(__dirname, "../shared/model-storage.js"),
     "utf8"
   );
-  const context = { window: {}, console, URL };
+  const context = { window: {}, console, URL, ...extraGlobals };
   vm.createContext(context);
   vm.runInContext(source, context);
   return context.ResumeModelStorage;
@@ -116,4 +116,42 @@ test("only HTTPS and local development API URLs are accepted", () => {
     () => storage.validateBaseUrl("http://api.example.com/v1"),
     /HTTPS/
   );
+});
+
+test("private setup imports locally once and preserves subsequent user edits", async () => {
+  const fake = createStorage();
+  let fetches = 0;
+  const storage = loadModelStorage({
+    chrome: { runtime: { getURL: (file) => `chrome-extension://test/${file}` } },
+    fetch: async () => {
+      fetches++;
+      return { ok: true, json: async () => ({
+        name: "DeepSeek Flash", baseUrl: "https://api.deepseek.com/v1",
+        apiKey: "test-private-key", model: "deepseek-flash",
+      }) };
+    },
+  });
+  const initial = await storage.loadModelState(fake.storage);
+  assert.equal(initial.activeModelId, "builtin-deepseek");
+  assert.equal(initial.builtinOverride.model, "deepseek-flash");
+  assert.equal(fake.state.local.builtinModelOverride.apiKey, "test-private-key");
+  assert.deepEqual(fake.state.sync, {});
+  await storage.saveModelState({ builtinOverride: {
+    ...initial.builtinOverride, apiKey: "user-replacement",
+  } }, fake.storage);
+  const next = await storage.getModelConfig("builtin-deepseek", fake.storage);
+  assert.equal(next.apiKey, "user-replacement");
+  assert.equal(fetches, 1);
+});
+
+test("missing private setup leaves regular configuration usable", async () => {
+  const fake = createStorage();
+  const storage = loadModelStorage({
+    chrome: { runtime: { getURL: (file) => file } },
+    fetch: async () => { throw new Error("not found"); },
+  });
+  const state = await storage.loadModelState(fake.storage);
+  assert.equal(state.activeModelId, "builtin-deepseek");
+  assert.equal(state.builtinOverride, null);
+  assert.equal(fake.state.local.localModelConfigImported, undefined);
 });

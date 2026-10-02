@@ -23,6 +23,11 @@ const startSelectionFillBtn = document.getElementById("startSelectionFillBtn");
 const startSelectionFillBtnText = document.getElementById(
   "startSelectionFillBtnText"
 );
+const recordSectionSelect = document.getElementById("recordSectionSelect");
+const recordSelect = document.getElementById("recordSelect");
+const startRecordFillBtn = document.getElementById("startRecordFillBtn");
+const startRecordFillBtnText = document.getElementById("startRecordFillBtnText");
+let recordOptionsSignature = "";
 const clearMappingCacheBtn = document.getElementById("clearMappingCacheBtn");
 const fillTipEl = document.getElementById("fillTip");
 
@@ -159,6 +164,15 @@ const FILL_ACTIONS = {
     doneLog: "增量填入完成",
     fillMode: "incremental",
     scope: "page",
+  },
+  recordSelection: {
+    triggerText: "框选并填入所选记录",
+    runningText: "等待选区...",
+    statusText: "等待选区...",
+    startLog: "请回到网页，只框选新增的一条记录。已有内容会保留。",
+    doneLog: "所选记录填入完成",
+    fillMode: "incremental",
+    scope: "selection",
   },
   selection: {
     triggerText: "选区填入",
@@ -926,6 +940,7 @@ async function loadResumeProfile() {
     renderResumeEditor(resumeProfile);
     isResumeDirty = false;
     saveResumeBtn.disabled = true;
+    updateStartFillAvailability();
   } finally {
     isLoadingResume = false;
   }
@@ -1535,6 +1550,15 @@ startSelectionFillBtn?.addEventListener("click", async () => {
   await runFill("selection");
 });
 
+startRecordFillBtn?.addEventListener("click", async () => {
+  await runFill("recordSelection");
+});
+recordSelect?.addEventListener("change", () => updateFillActionButtons());
+recordSectionSelect?.addEventListener("change", () => {
+  renderRecordSelector();
+  updateFillActionButtons();
+});
+
 async function runFill(actionKey) {
   if (isFilling) return;
 
@@ -1557,6 +1581,16 @@ async function runFill(actionKey) {
   if (!isModelConfigured(activeModel)) {
     addLog("error", "请先在设置中配置模型");
     openModal();
+    return;
+  }
+
+  const fillProfile = schema.clone(resumeProfile);
+  const recordSelection = actionKey === "recordSelection" && recordSelect?.value !== ""
+    ? { section: recordSectionSelect.value, index: Number(recordSelect.value) } : null;
+  const selectedRecord = recordSelection && schema.getRecordChoices(fillProfile, recordSelection.section)
+    .find(item => item.index === recordSelection.index);
+  if (actionKey === "recordSelection" && !selectedRecord) {
+    addLog("warning", "请先选择要填写的记录；可在标准简历的对应类别中添加。");
     return;
   }
 
@@ -1585,6 +1619,7 @@ async function runFill(actionKey) {
   updateStatus("running", actionConfig.statusText);
   beginFillSession(tab);
   addLog("info", actionConfig.startLog);
+  if (selectedRecord) addLog("info", `本次记录：${selectedRecord.label}`);
 
   try {
     const injected = await ensureContentScriptInjected(tab.id);
@@ -1596,7 +1631,8 @@ async function runFill(actionKey) {
     const response = await sendTabMessage(tab.id, {
       action: "startFill",
       modelId,
-      resumeProfile,
+      resumeProfile: fillProfile,
+      recordSelection,
       fillMode: actionConfig.fillMode,
       scope: actionConfig.scope,
     });
@@ -1664,7 +1700,26 @@ function updateFillStats(fieldCount, mappedCount, filledCount) {
   recordFillSessionStats(fieldCount, mappedCount, filledCount);
 }
 
+function renderRecordSelector() {
+  if (!recordSelect || !recordSectionSelect) return;
+  if (!recordSectionSelect.options.length) {
+    recordSectionSelect.innerHTML = schema.sections.filter(section => section.type === "list")
+      .map(section => `<option value="${section.key}">${escapeHtml(section.key === "projects" ? "科研 / 项目经历" : section.key === "familyMembers" ? "家庭成员 / 社会关系" : section.label)}</option>`).join("");
+    recordSectionSelect.value = "awards";
+  }
+  const sectionKey = recordSectionSelect.value;
+  const records = schema.getRecordChoices(resumeProfile, sectionKey);
+  const signature = JSON.stringify([activeTemplateId, sectionKey, records]);
+  if (signature === recordOptionsSignature) return;
+  recordOptionsSignature = signature;
+  const placeholder = records.length ? "请选择要填写的记录" : "暂无记录，请在标准简历中添加";
+  recordSelect.innerHTML = `<option value="">${placeholder}</option>` + records.map(({ index, label }) =>
+    `<option value="${index}">${escapeHtml(label)}</option>`).join("");
+  recordSelect.value = "";
+}
+
 function updateStartFillAvailability() {
+  renderRecordSelector();
   const hasData = schema.hasAnyFilledField(resumeProfile);
   updateFillActionButtons({ hasData, isRunning: isFilling });
 }
@@ -1674,7 +1729,12 @@ function updateFillActionButtons({
   isRunning = isFilling,
   runningActionKey = "",
 } = {}) {
+  if (recordSectionSelect) recordSectionSelect.disabled = isRunning;
+  if (recordSelect) recordSelect.disabled = isRunning || !schema.getRecordChoices(resumeProfile, recordSectionSelect?.value).length;
+  if (fillTemplateSelect) fillTemplateSelect.disabled = isRunning;
+  if (resumeTemplateSelect) resumeTemplateSelect.disabled = isRunning;
   const buttonMap = [
+    { key: "recordSelection", button: startRecordFillBtn, labelEl: startRecordFillBtnText },
     {
       key: "overwritePage",
       button: startFillBtn,
@@ -1696,8 +1756,11 @@ function updateFillActionButtons({
     if (!item.button || !item.labelEl) continue;
     const config = FILL_ACTIONS[item.key];
     const isCurrent = runningActionKey === item.key;
-    item.button.disabled = !hasData || isRunning;
-    if (!hasData) {
+    const needsRecord = item.key === "recordSelection" && (!recordSelect || recordSelect.value === "");
+    item.button.disabled = !hasData || isRunning || needsRecord;
+    if (needsRecord) {
+      item.labelEl.textContent = "请选择记录";
+    } else if (!hasData) {
       item.labelEl.textContent = "请先填写标准简历";
     } else if (isCurrent && isRunning) {
       item.labelEl.textContent = config.runningText;
@@ -1708,6 +1771,9 @@ function updateFillActionButtons({
 }
 
 function buildFillTipText(actionKey, cacheHit) {
+  if (actionKey === "recordSelection") {
+    return "已仅使用所选记录填写选区，保留已有内容。请核对本条信息，再保存。";
+  }
   const modeLabel =
     actionKey === "incrementalPage"
       ? "增量填入"
@@ -1772,6 +1838,7 @@ async function injectContentScript(tabId) {
         "shared/field-text.js",
         "shared/field-semantics.js",
         "shared/fill-runtime.js",
+        "shared/custom-select.js",
         "shared/content-bridge.js",
         "shared/ai-client.js",
         "content.js",

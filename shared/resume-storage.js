@@ -199,6 +199,38 @@
     });
   }
 
+  // Import an optional private profile once, preserving all existing templates.
+  async function importLocalResumeConfig(storage, templates) {
+    if (!root?.chrome?.runtime?.getURL || typeof root.fetch !== "function") return null;
+    const marker = "localResumeConfigImported";
+    const saved = await storage.local.get([marker]);
+    if (saved[marker]) return null;
+    let response;
+    try {
+      response = await root.fetch(root.chrome.runtime.getURL("local-resume-config.json"));
+    } catch (_) {
+      return null;
+    }
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data?.profile || !isMeaningfulProfile(data.profile)) {
+      throw new Error("本地简历配置缺少有效个人资料");
+    }
+    const template = buildEmptyTemplate(makeId(), text(data.name) || "本地简历");
+    template.profile = root.ResumeSchema
+      ? root.ResumeSchema.normalizeResumeProfile(data.profile)
+      : clone(data.profile);
+    template.schemaVersion = root.ResumeSchema?.version || data.schemaVersion;
+    template.rawText = text(data.rawText);
+    const nextTemplates = [...templates, template];
+    await storage.local.set({
+      [keys.templates]: toTemplateMap(nextTemplates),
+      [keys.activeTemplateId]: template.id,
+      [marker]: true,
+    });
+    return { templates: nextTemplates, activeTemplateId: template.id };
+  }
+
   async function loadTemplateState(storageOverride) {
     const storage = getStorage(storageOverride);
     const localData = await storage.local.get([
@@ -238,6 +270,9 @@
     // 清理旧 key
     await removeIfAvailable(storage.local, allLegacyKeys);
     await removeIfAvailable(storage.sync, allLegacyKeys);
+
+    const localSetup = await importLocalResumeConfig(storage, templates);
+    if (localSetup) return localSetup;
 
     return { templates, activeTemplateId };
   }
